@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>物理療法管理システム (共有版) 261125-1328 自動保存先分離</title>
+  
+  <link rel="icon" href="favicon.jpg" />
+  <link rel="apple-touch-icon" href="icon.jpg" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+  <style>
+    :root{
+      /* ★背景色を変更しました（#fff9f4）★ */
+      --bg:whitesmoke;
+      --card:#ffffff;--muted:#6b7280;--muted-2:#9aa3b2;--fg:#111827;
+      --border:#e5e7eb;--line:#eef1f5;--primary:#0f5bff;--primary-2:#0b49cc;
+      --accent:orange;--header:#0f5bff;--btn:#0f172a;--btn-bg:#f3f4f6;--btn-bg-h:#e5e7eb;
+      --entry:#f9fafb;--shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(0,0,0,.06);
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{
+      margin:0;padding:16px;display:flex;flex-direction:column;gap:12px;
+      background:var(--bg);color:var(--fg);
+      font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,"ヒラギノ角ゴ ProN",Meiryo,sans-serif
+    }
+
+    /* 上段：左に「登録」カード、右に患者入力カードを横並び */
+    #top-layout{
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      width:100%;
+    }
+    #register-panel{
+      width:230px;
+      min-width:200px;
+      height:140px;
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:14px;
+      box-shadow:var(--shadow);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    #register-button{
+      width:80%;
+      height:70%;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#ffffff;
+      font-size:28px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    #register-button:hover{
+      background:var(--btn-bg-h);
+    }
+
+    /* 上段：患者入力カード */
+    #patient-info-container{width:100%}
+    #patient-info{
+      background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:14px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow)
+    }
+    .input-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%}
+    #data-load-row{justify-content:space-between}
+    label,strong,.menu-label,.body-label{white-space:nowrap}
+    input[type="text"]{
+      height:36px;padding:0 10px;border:1px solid var(--border);
+      border-radius:10px;background:#fff;outline:none
+    }
+    input[type="text"]:focus-visible{
+      border-color:var(--primary);box-shadow:0 0 0 3px rgba(15,91,255,.15)
+    }
+    #patient-id-input,#rehab-start-time,#pt-ot-input,#memo-input{width:110px}
+    #name-input{width:250px}
+    #memo-input{width:225px}
+    #patient-id-input,#name-input{font-size:1.1em}
+    input[type="radio"]{accent-color:var(--primary)}
+
+    /* 2段目：ファイル表示 */
+    #file-name-display{display:flex;gap:14px;align-items:center;margin-left:6px;color:var(--muted)}
+    #reservations-file-name,#patients-file-name{color:var(--btn)}
+
+    /* 中段：並べ替え＆チェック（今は使っていませんが念のため残しています） */
+    #sort-and-checkbox-container{display:flex;align-items:center;gap:10px}
+
+    /* テーブル群 */
+    .therapy-tables-container{
+      flex:1;display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;margin-top:6px
+    }
+    .therapy-table{
+      flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);
+      border-radius:12px;display:flex;flex-direction:column;overflow:hidden
+    }
+    .therapy-table-header{
+      background:linear-gradient(180deg,#3a6073,#16222a);color:#fff;padding:10px 8px;
+      text-align:center;position:sticky;top:0;z-index:1;font-weight:600;letter-spacing:.04em;
+      font-size:16px;
+    }
+    .therapy-table button{
+      width:100%;border:0;border-bottom:1px solid var(--line);background:#f8fafc;
+      cursor:pointer;font-size:18px;padding:10px 10
+    }
+    .therapy-table button:hover{background:#eef2f7}
+    .therapy-table-content{overflow-y:auto;flex:1}
+
+    /* エントリ */
+    .patient-entry{
+      position:relative;background:var(--entry);border:1px solid var(--line);border-radius:8px;
+      margin:4px 4px 2px;padding:10px 10px 12px;
+      box-shadow:0 2px 4px rgba(0,0,0,0.1), 0 6px 16px rgba(0,0,0,0.1);
+      cursor:grab;user-select:none;will-change:transform;
+    }
+    .patient-entry:active{cursor:grabbing}
+    .patient-entry.dragging{opacity:.6;outline:4px dashed var(--primary);outline-offset:-2px}
+
+    .memo-div{font-size:11px;line-height:1.2;margin-top:2px}
+    .patient-entry.selected{box-shadow:0 0 0 2px var(--accent) inset}
+    .patient-entry .patient-name{font-weight:500;font-size:1.25em !important}
+    .time-stamp{display:block;position:static;margin-bottom:1px;font-size:11px;line-height:.8;color:var(--muted-2)}
+    .completed-check{position:absolute;top:8px;right:10px;font-size:12px;color:var(--muted)}
+    .red-bold{font-weight:700;color:#dc2626}
+    .blue-bold{font-weight:700;color:#1d4ed8}
+
+    /* 重複表示用のインジケーター（色を変更） */
+    .dup-indicator {
+      float: right;
+      font-weight: bold;
+      color: dimgray; /* ★ここを変更しました★ */
+      font-size: 0.95em;
+      margin-left: 6px;
+      background: rgba(255,255,255,0.8);
+      padding: 0 2px;
+      border-radius: 4px;
+    }
+
+    /* コンテキストメニュー */
+    .context-menu{
+      display:none;position:absolute;z-index:1000;background:#fff;border:1px solid var(--border);
+      border-radius:10px;box-shadow:var(--shadow);width:200px;overflow:hidden;font-size:14px;
+    }
+    .context-menu ul{margin:0;padding:6px 0;list-style:none}
+    .context-menu li{padding:8px 10px;line-height:1.2;cursor:pointer}
+    .context-menu li:hover{background:#f3f4f6}
+    .menu-separator{border-top:1px solid var(--border);margin:4px 0}
+
+    /* ボタン共通 */
+    button{
+      height:34px;padding:0 12px;border:1px solid var(--border);
+      border-radius:10px;background:var(--btn-bg);color:var(--btn);cursor:pointer
+    }
+    button:hover{background:var(--btn-bg-h)}
+    #toggle-save-load-button{height:28px}
+    #save-load-container{display:none;flex-direction:column;gap:6px}
+    #save-load-buttons{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    button:disabled{opacity:.55;cursor:wait}
+    #error-message{white-space:pre-wrap;overflow-wrap:anywhere}
+    #error-message{display:none;color:#dc2626;font-weight:700}
+
+    @media (max-width:1200px){.therapy-table{min-width:120px}}
+    @media (max-width:800px){
+      .therapy-table{min-width:100px}
+      #name-input{width:200px}
+      #memo-input{width:180px}
+      #top-layout{flex-direction:column}
+      #register-panel{width:100%;height:100px}
+    }
+    @media (max-width:500px){
+      .therapy-tables-container{flex-direction:column;overflow-x:visible}
+      .therapy-table{width:100%;min-width:unset}
+    }
+
+    /* 指定：3行目（物療：先/後…）は非表示、名前は太字にしない */
+    #patient-info .input-row:nth-of-type(3){display:none!important;}
+    .patient-entry .patient-name{font-weight:400!important;}
+
+    /* 登録モーダル */
+    #register-modal{
+      position:fixed;inset:0;background:rgba(0,0,0,.35);
+      display:none;align-items:center;justify-content:center;z-index:2000;
+    }
+    .modal-dialog{
+      width:520px;max-width:95%;background:var(--card);border-radius:14px;
+      border:1px solid var(--border);box-shadow:var(--shadow);
+      padding:16px 20px 18px;
+    }
+    .modal-header{
+      display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;
+    }
+    .modal-title{font-weight:600;font-size:16px}
+    .modal-close{
+      border:none;background:transparent;font-size:20px;line-height:1;
+      cursor:pointer;padding:0 4px;
+    }
+    .modal-body{
+      display:flex;flex-direction:column;gap:8px;font-size:13px;
+    }
+    .modal-row{
+      display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    }
+    .modal-label{
+      width:80px;text-align:right;font-weight:600;
+    }
+    .modal-row input[type="text"]{
+      flex:1;min-width:120px;height:32px;border-radius:10px;
+      border:1px solid var(--border);padding:0 8px;
+    }
+    .modal-display{
+      flex:1;min-height:24px;padding:4px 8px;background:#f9fafb;
+      border-radius:8px;border:1px solid var(--border);
+    }
+    .modal-section-title{
+      font-weight:600;margin-top:6px;
+    }
+    .modal-checkbox-row{
+      display:flex;flex-wrap:wrap;gap:12px;padding-left:88px;
+    }
+    .modal-footer{
+      display:flex;justify-content:flex-end;margin-top:12px;
+    }
+    #modal-register-button{
+      height:36px;padding:0 28px;background:#3b82f6;color:#fff;
+      border-radius:10px;border:none;font-size:14px;font-weight:600;
+    }
+    #modal-register-button:hover{background:#2563eb}
+    #modal-register-button:disabled{
+      opacity:0.4;
+      cursor:default;
+    }
+    
+    /* 登録ウィンドウ拡大 */
+    #register-modal .modal-dialog{
+      transform: scale(1.2);
+      transform-origin: top center;
+    }
+    #register-modal{ font-size: 120%; }
+    #register-modal input[type="text"]{
+      height: 40px; font-size: 1em; padding: 6px 10px;
+    }
+    #register-modal input[type="radio"],
+    #register-modal input[type="checkbox"]{
+      transform: scale(1.4); margin-right: 6px;
+    }
+    #modal-register-button{
+      height: 48px; padding: 0 32px; font-size: 1em;
+    }
+    .modal-close{ font-size: 32px; }
+
+    
+    /* F2 未定追加モーダル */
+    #quick-add-modal{
+      position:fixed;inset:0;background:rgba(0,0,0,.35);
+      display:none;align-items:center;justify-content:center;z-index:3000;
+    }
+    #quick-add-modal .modal-dialog{
+      width:420px;
+    }
+    .quick-add-name{
+      font-size:20px;
+      font-weight:600;
+      min-height:36px;
+      padding:8px 12px;
+      background:#f9fafb;
+      border:1px solid var(--border);
+      border-radius:10px;
+    }
+    #quick-add-button{
+      width:100%;
+      height:48px;
+      background:#2563eb;
+      color:#fff;
+      border:none;
+      font-size:18px;
+      font-weight:600;
+    }
+
+    /* 通信状態表示 */
+    #status-indicator {
+        position: fixed; bottom: 10px; right: 10px;
+        font-size: 12px; color: #aaa; z-index: 9999;
+    }
+  </style>
+</head>
+<body ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+
+  <div id="status-indicator">未接続</div>
+
+  <div id="top-layout">
+    <div id="register-panel">
+      <button id="register-button" type="button">登録</button>
+    </div>
+
+    <div id="patient-info-container">
+      <div id="patient-info">
+        <div class="input-row">
+          <label for="patient-id-input"><strong>患者ID:</strong></label>
+          <input id="patient-id-input" type="text" placeholder="患者ID" tabindex="1" onkeypress="handleIDInput(event)">
+          <label for="name-input"><strong>名前:</strong></label>
+          <input id="name-input" type="text" placeholder="名前" tabindex="2">
+          <label for="rehab-start-time"><strong>リハビリ開始時間:</strong></label>
+          <input id="rehab-start-time" type="text" placeholder="開始時間" tabindex="3">
+          <label for="pt-ot-input"><strong>担当:</strong></label>
+          <input id="pt-ot-input" type="text" placeholder="担当" tabindex="4">
+          <input id="gender-input" type="hidden">
+        </div>
+        <div class="input-row">
+          <div class="menu-label"><strong>物療項目：</strong></div><div id="menu-display" class="menu-text"></div>
+          <div class="body-label"><strong>　　物療部位：</strong></div><div id="body-display" class="body-text"></div>
+        </div>
+        <div class="input-row">
+          <strong>物療：</strong>
+          <label><input type="radio" name="therapy-option" value="先" tabindex="5" checked>先</label>
+          <label><input type="radio" name="therapy-option" value="後" tabindex="6">後</label>
+          <label><input type="radio" name="therapy-option" value="物療のみ" tabindex="7">物療のみ</label>
+          <label><input type="radio" name="therapy-option" value="物療なし" tabindex="8">物療なし</label>
+          <label for="memo-input"><strong>メモ:</strong></label>
+          <input id="memo-input" type="text" placeholder="メモ" tabindex="9">
+          <button id="clear-button" onclick="clearInputs()" tabindex="10">クリア</button>
+        </div>
+        
+        <div class="input-row" id="data-load-row">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button id="toggle-save-load-button" onclick="toggleSaveLoad()">▼</button>
+            
+            <button id="data-load-button" type="button" tabindex="11">データ読み込み</button>
+            <button id="fallback-folder-button" type="button">代替読み込み</button>
+            <input id="fallback-folder-input" type="file" webkitdirectory multiple hidden>
+            <input id="fallback-files-input" type="file" accept=".csv,text/csv" multiple hidden>
+            <span id="folder-status" role="status" style="font-size:12px;color:var(--muted)">フォルダ確認中</span>
+            <span id="backup-status" role="status" style="font-size:12px;color:var(--muted)">自動保存: 確認中</span>
+            <span id="file-name-display">
+              <span id="reservations-display"><strong>Reservations:</strong><span id="reservations-file-name"> 未読み込み</span></span>
+              <span id="patients-display"><strong>Patients:</strong><span id="patients-file-name"> 未読み込み</span></span>
+            </span>
+
+            <button id="sort-button" onclick="sortPatients()" tabindex="21">並べ替える</button>
+            <label><input id="show-completed" type="checkbox" checked onchange="toggleCompletedVisibility()" tabindex="15"> 終了した人を表示</label>
+          </div>
+          
+          <span id="cell-count"></span>
+        </div>
+        <div id="error-message" role="alert"></div>
+
+        <div id="save-load-container">
+          <div id="save-load-buttons">
+            <label><strong>読み込み用フォルダ:</strong></label>
+            <button id="folder-select-button" type="button">フォルダを選択</button>
+            <button id="fallback-files-button" type="button">CSVを直接選択</button>
+            <span id="folder-name-display" style="color:var(--muted)"></span>
+          </div>
+          <div id="backup-folder-settings" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:8px">
+            <label><strong>自動保存用フォルダ:</strong></label>
+            <button id="backup-folder-button" type="button">自動保存先を選択</button>
+            <button id="write-permission-button" type="button">自動保存を許可</button>
+            <span id="backup-folder-name" style="color:var(--muted)">未設定</span>
+            <span style="font-size:12px;color:var(--muted)">5分ごとに保存・読み込み用とは別のフォルダを指定</span>
+          </div>
+        </div>
+        <div class="input-row">
+          <button id="save-and-delete-button" style="display:none" onclick="saveDataAndClear()">データを保存して全削除</button>
+          <button id="restore-button" style="display:none" onclick="restoreDataFromCSV()">データ復元</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="therapy-tables-container">
+  
+    <div id="未定" class="therapy-table">
+    <button onclick="addPatientToTherapy('未定')" tabindex="15">➕️</button>
+    <div class="therapy-table-header">未定</div>
+    <div class="therapy-table-content"></div>
+  </div>
+  
+    <div id="干渉波" class="therapy-table"><button onclick="addPatientToTherapy('干渉波')" tabindex="16">➕️</button><div class="therapy-table-header">干渉波</div><div class="therapy-table-content"></div></div>
+    <div id="ホットパック" class="therapy-table"><button onclick="addPatientToTherapy('ホットパック')" tabindex="17">➕️</button><div class="therapy-table-header">ホットパック</div><div class="therapy-table-content"></div></div>
+    <div id="マイクロ波" class="therapy-table"><button onclick="addPatientToTherapy('マイクロ波')" tabindex="18">➕️</button><div class="therapy-table-header">マイクロ波</div><div class="therapy-table-content"></div></div>
+    <div id="ウォーターベッド" class="therapy-table"><button onclick="addPatientToTherapy('ウォーターベッド')" tabindex="19">➕️</button><div class="therapy-table-header">ウォーターベッド</div><div class="therapy-table-content"></div></div>
+    <div id="バイブラバス" class="therapy-table"><button onclick="addPatientToTherapy('バイブラバス')" tabindex="20">➕️</button><div class="therapy-table-header">バイブラバス</div><div class="therapy-table-content"></div></div>
+    <div id="物療なし" class="therapy-table"><button onclick="addPatientToTherapy('物療なし')" tabindex="22">➕️</button><div class="therapy-table-header">物療なし</div><div class="therapy-table-content"></div></div>
+  </div>
+
+
+
+  <div id="context-menu" class="context-menu">
+    <ul>
+      <li onclick="changeColor('whitesmoke')">⚪️　無印</li>
+      <li onclick="changeColor('khaki')">🟡　物療中</li>
+      <li onclick="changeColor('lightblue')">🔵　PT/OT</li>
+      <li onclick="changeColor('darkgray')">⚫️　すべて終了</li>
+      <li class="menu-separator"></li>
+      <li onclick="markAsCompleted('物')">✔️　物療済み</li>
+      <li onclick="markAsCompleted('PT/OT')">✔️　PT/OT済み</li>
+      <li class="menu-separator"></li>
+      <li onclick="updateTherapyValue('物療：先')">✏️　物療：先</li>
+      <li onclick="updateTherapyValue('物療：後')">✏️　物療：後</li>
+      <li onclick="updateTherapyValue('物療のみ')">✏️　物療のみ</li>
+      <li onclick="updateTherapyValue('物療なし')">✏️　物療なし</li>
+      <li class="menu-separator"></li>
+      <li onclick="editMemo()">📝　メモを編集</li>
+      <li onclick="deleteEntry()">❌️　削除</li>
+    </ul>
+  </div>
+
+  <div id="register-modal">
+    <div class="modal-dialog" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">登録</span>
+        <button type="button" class="modal-close" onclick="closeRegisterModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-row">
+          <span class="modal-label">患者ID:</span>
+          <input id="reg-patient-id" type="text" placeholder="患者ID">
+        </div>
+        <div class="modal-row">
+          <span class="modal-label">名前:</span>
+          <input id="reg-name" type="text" placeholder="名前">
+        </div>
+        <div class="modal-row">
+          <span class="modal-label">リハビリ開始時間:</span>
+          <input id="reg-start-time" type="text" placeholder="開始時間">
+          <span class="modal-label">担当:</span>
+          <input id="reg-pt-ot" type="text" placeholder="担当" style="flex:0 0 120px">
+        </div>
+        <div class="modal-row">
+          <span class="modal-label">物療項目:</span>
+          <div id="reg-menu-text" class="modal-display"></div>
+        </div>
+        <div class="modal-row">
+          <span class="modal-label">物療部位:</span>
+          <div id="reg-body-text" class="modal-display"></div>
+        </div>
+
+        <input id="reg-gender" type="hidden">
+
+        <div class="modal-row">
+          <span class="modal-label"></span>
+          <div>
+            <span>物療：</span>
+            <label><input type="radio" name="reg-therapy-option" value="先" checked>物療：先</label>
+            <label><input type="radio" name="reg-therapy-option" value="後">物療：後</label>
+            <label><input type="radio" name="reg-therapy-option" value="物療のみ">物療のみ</label>
+            <label><input type="radio" name="reg-therapy-option" value="物療なし">物療なし</label>
+          </div>
+        </div>
+
+        <div class="modal-section-title">本日の物理療法</div>
+        <div class="modal-checkbox-row">
+          <label><input type="checkbox" name="reg-modality" data-table-id="干渉波">干渉波</label>
+          <label><input type="checkbox" name="reg-modality" data-table-id="ホットパック">ホットパック</label>
+          <label><input type="checkbox" name="reg-modality" data-table-id="マイクロ波">マイクロ</label>
+          <label><input type="checkbox" name="reg-modality" data-table-id="ウォーターベッド">ウォーターベッド</label>
+          <label><input type="checkbox" name="reg-modality" data-table-id="バイブラバス">バイブラ</label>
+          <label><input type="checkbox" name="reg-modality" data-table-id="物療なし">物療なし</label>
+        </div>
+
+        <div class="modal-footer">
+          <button id="modal-register-button" type="button" onclick="registerFromModal()" disabled>登録</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="quick-add-modal">
+    <div class="modal-dialog" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">未定に追加</span>
+        <button type="button" class="modal-close" onclick="closeQuickAddModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-row">
+          <span class="modal-label">患者ID:</span>
+          <input id="quick-add-id" type="text" placeholder="患者IDを入力">
+        </div>
+
+        <div class="modal-row">
+          <span class="modal-label">名前:</span>
+          <div id="quick-add-name" class="quick-add-name"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="quick-add-button" type="button" onclick="addPatientToUndecided()">未定に追加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+    const on=(el,ev,fn)=>el.addEventListener(ev,fn);
+    let currentEntry=null,reservationsData=null,patientsData=null,reservationsFileName='',patientsFileName='',columnIndex={};
+    const reqCols=["患者ID","名前","担当","物療項目","物療部位","性別"];
+    const error=(m)=>{const e=$("#error-message");e.textContent=m;e.style.display='block';};
+
+    /* ★重複表示用の略語マップ ★ */
+    const tableAbbr = {
+      "干渉波": "干",
+      "ホットパック": "ホ",
+      "マイクロ波": "マ",
+      "ウォーターベッド": "ウ",
+      "バイブラバス": "バ",
+      "物療なし": "ー"
+    };
+    /* 表示順序定義 */
+    const tableOrder = ["干渉波", "ホットパック", "マイクロ波", "ウォーターベッド", "バイブラバス", "物療なし"];
+
+
+    /* ★Firebaseの合鍵設定★ */
+    const firebaseConfig = {
+      apiKey: "AIzaSyAcZhqZ7VYB5CbINS8E6_IK7rXzRoyKPpY",
+      authDomain: "buturyo6.firebaseapp.com",
+      databaseURL: "https://buturyo6-default-rtdb.firebaseio.com",
+      projectId: "buturyo6",
+      storageBucket: "buturyo6.firebasestorage.app",
+      messagingSenderId: "830661998640",
+      appId: "1:830661998640:web:bb5d073177a430860095f5"
+    };
+
+    // Firebaseを起動して、データベースにつなぐ
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const dbRef = db.ref('therapyData'); // データの保存場所
+    const statusDiv = document.getElementById('status-indicator');
+
+    // 接続状態を表示
+    const connectedRef = db.ref(".info/connected");
+    connectedRef.on("value", (snap) => {
+      if (snap.val() === true) {
+        statusDiv.textContent = "🟢 接続中";
+        statusDiv.style.color = "green";
+      } else {
+        statusDiv.textContent = "🔴 切断";
+        statusDiv.style.color = "red";
+      }
+    });
+
+
+    /* F2 未定追加モーダル */
+    function openQuickAddModal(){
+      $("#quick-add-id").value="";
+      $("#quick-add-name").textContent="";
+      document.getElementById("quick-add-modal").style.display="flex";
+      setTimeout(()=>$("#quick-add-id").focus(),0);
+    }
+
+    function closeQuickAddModal(){
+      document.getElementById("quick-add-modal").style.display="none";
+    }
+
+    function searchPatientForQuickAdd(id){
+      const nameBox=$("#quick-add-name");
+
+      if(!patientsData || !id){
+        nameBox.textContent="";
+        return null;
+      }
+
+      const trimmed=id.trim();
+
+      const patient=patientsData.find((row,i)=>
+        i &&
+        String(row[columnIndex["患者ID"]]||'').trim()===trimmed
+      );
+
+      if(!patient){
+        nameBox.textContent="";
+        return null;
+      }
+
+      nameBox.textContent=String(patient[columnIndex["名前"]]||'');
+      return patient;
+    }
+
+    function addPatientToUndecided(){
+      const id=$("#quick-add-id").value.trim();
+
+      if(!id){
+        alert("患者IDを入力してください。");
+        return;
+      }
+
+      const patient=searchPatientForQuickAdd(id);
+
+      if(!patient){
+        alert("一致する患者が見つかりません。");
+        return;
+      }
+
+      const name=String(patient[columnIndex["名前"]]||'');
+      const ptOt=String(patient[columnIndex["担当"]]||'');
+      const gender=String(patient[columnIndex["性別"]]||'');
+      const therapy="先";
+
+      let startTime="";
+
+      if(reservationsData){
+        const today=getTodayString();
+        const excelSerialDateToJSDate=s=>new Date((s-25569)*86400000);
+        const fmt=d=>`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+
+        const reservation=reservationsData.find((row,i)=>{
+          if(!i)return false;
+
+          const rid=String(row[1]||'').trim();
+
+          let dt=row[3];
+
+          if(typeof dt==='number'){
+            dt=fmt(excelSerialDateToJSDate(dt));
+          }else{
+            dt=(typeof dt==='string') ? dt.trim() : '';
+          }
+
+          return rid===id && dt===today;
+        });
+
+        startTime=reservation ? String(reservation[4]||'').trim() : '';
+      }
+
+      const entry=createPatientEntry(
+        id,
+        name,
+        startTime,
+        ptOt,
+        therapy,
+        "",
+        gender
+      );
+
+      document.querySelector('#未定 .therapy-table-content').appendChild(entry);
+
+      saveData();
+      updateCellCount();
+      closeQuickAddModal();
+    }
+
+    document.addEventListener('keydown',(event)=>{
+      if(event.key==="F2"){
+        event.preventDefault();
+        openQuickAddModal();
+      }
+
+      if(event.key==="Escape"){
+        closeQuickAddModal();
+      }
+    });
+
+    on($("#quick-add-modal"),"click",closeQuickAddModal);
+
+    on($("#quick-add-id"),"input",()=>{
+      searchPatientForQuickAdd($("#quick-add-id").value);
+    });
+
+    on($("#quick-add-id"),"keydown",(event)=>{
+      if(event.key==="Enter"){
+        event.preventDefault();
+        addPatientToUndecided();
+      }
+    });
+
+
+    /* モーダル開閉 */
+    function openRegisterModal(){
+      $("#reg-patient-id").value="";
+      $("#reg-name").value="";
+      $("#reg-start-time").value="";
+      $("#reg-pt-ot").value="";
+      $("#reg-menu-text").textContent="";
+      $("#reg-body-text").textContent="";
+      $("#reg-gender").value="";
+      document.querySelectorAll('input[name="reg-therapy-option"]').forEach(r=>r.checked=false);
+      document.querySelector('input[name="reg-therapy-option"][value="先"]').checked=true;
+      document.querySelectorAll('input[name="reg-modality"]').forEach(c=>c.checked=false);
+
+      document.getElementById("register-modal").style.display="flex";
+      setTimeout(()=>$("#reg-patient-id").focus(),0);
+
+      updateModalRegisterButtonState();
+    }
+    function closeRegisterModal(){
+      document.getElementById("register-modal").style.display="none";
+    }
+    on($("#register-button"),"click",openRegisterModal);
+    on($("#register-modal"),"click",closeRegisterModal);
+
+    function highlightSameID(id){
+      $$('.patient-entry.selected').forEach(e=>e.classList.remove('selected'));
+      $$('.patient-entry').forEach(e=>{if(e.dataset.id===id)e.classList.add('selected');});
+    }
+
+    /* IndexedDB（フォルダ記憶） */
+    let activeDirectory=null, folderTouched=false, folderBusy=false;
+    let folderGeneration=0, autoSaving=false;
+    // 読み込み先と保存先は別々のハンドル・記憶キーで管理する
+    let backupDirectory=null, backupTouched=false, backupGeneration=0, backupPicking=false;
+    const initDB=()=>new Promise((res,rej)=>{
+      const r=indexedDB.open("folderDB",1);
+      r.onupgradeneeded=e=>{
+        if(!e.target.result.objectStoreNames.contains("handles"))
+          e.target.result.createObjectStore("handles",{keyPath:"key"});
+      };
+      r.onsuccess=()=>res(r.result);
+      r.onerror=()=>rej(r.error);
+      r.onblocked=()=>rej(new Error("フォルダ記憶データベースが使用中です。"));
+    });
+    async function directoryTransaction(mode, operation){
+      const db=await initDB();
+      try{
+        return await new Promise((res,rej)=>{
+          const t=db.transaction("handles",mode);
+          const req=operation(t.objectStore("handles"));
+          t.oncomplete=()=>res(req.result);
+          t.onerror=()=>rej(t.error || req.error);
+          t.onabort=()=>rej(t.error || new Error("フォルダ情報の保存が中断されました。"));
+        });
+      }finally{db.close();}
+    }
+    const saveDirectoryHandle=h=>directoryTransaction("readwrite",s=>s.put({key:"folderHandle",handle:h}));
+    const forgetDirectoryHandle=()=>directoryTransaction("readwrite",s=>s.delete("folderHandle"));
+    const getDirectoryHandleFromDB=async()=>{
+      const v=await directoryTransaction("readonly",s=>s.get("folderHandle"));
+      return v?.handle || null;
+    };
+    const saveBackupDirectoryHandle=h=>directoryTransaction("readwrite",s=>s.put({key:"backupFolderHandle",handle:h}));
+    const getBackupDirectoryHandle=async()=>{
+      const v=await directoryTransaction("readonly",s=>s.get("backupFolderHandle"));
+      return v?.handle || null;
+    };
+    // 過去の許可記録は信用せず、必ずブラウザの現在の権限を確認する
+    async function verifyPermission(handle,mode='read',allowRequest=false){
+      if(!handle || typeof handle.queryPermission!=='function')return false;
+      const opts={mode};
+      if(await handle.queryPermission(opts)==='granted')return true;
+      if(allowRequest && typeof handle.requestPermission==='function')
+        return (await handle.requestPermission(opts))==='granted';
+      return false;
+    }
+    function setFolderStatus(text,warning=false){
+      $("#folder-status").textContent=text;
+      $("#folder-status").style.color=warning?'#b45309':'#166534';
+    }
+    function setBackupStatus(text,warning=false){
+      $("#backup-status").textContent='自動保存: '+(backupDirectory?backupDirectory.name+' ／ ':'')+text;
+      $("#backup-status").style.color=warning?'#b45309':'#166534';
+    }
+    function clearLoadError(){ $("#error-message").style.display='none'; }
+    function describeFolderError(e){
+      const details={NotAllowedError:'アクセス権限が拒否されたか失効しました。',NotFoundError:'フォルダまたはファイルが見つかりません。共有フォルダの接続も確認してください。',SecurityError:'ブラウザのセキュリティ制限によりフォルダにアクセスできません。',NotReadableError:'ファイルを読み取れません。OSの権限や共有フォルダの接続を確認してください。',InvalidStateError:'フォルダの状態が無効です。',AbortError:'操作がキャンセルされました。'};
+      return (details[e?.name] || e?.message || String(e))+(details[e?.name]?' ('+e.name+')':'');
+    }
+    function setFolderBusy(b){
+      folderBusy=b;
+      ['data-load-button','folder-select-button','fallback-folder-button','fallback-files-button'].forEach(id=>document.getElementById(id).disabled=b);
+      $("#data-load-button").textContent=b?'読み込み中…':'データ読み込み';
+    }
+    async function sameAsReadDirectory(dir){
+      // 通常方式で読み込み先が判明している場合は同一フォルダへの保存を防止する
+      if(!dir || !activeDirectory)return false;
+      return await dir.isSameEntry(activeDirectory);
+    }
+    function setBackupDirectory(dir){
+      backupTouched=true;backupDirectory=dir;backupGeneration++;
+      $("#backup-folder-name").textContent=dir?dir.name:'未設定';
+    }
+    async function refreshBackupStatus(){
+      const dir=backupDirectory,g=backupGeneration;
+      if(!dir){setBackupStatus('未設定（▼から保存先を選択）',true);return;}
+      try{
+        const same=await sameAsReadDirectory(dir);
+        const granted=!same && await verifyPermission(dir,'readwrite',false);
+        if(g!==backupGeneration)return;
+        if(same)setBackupStatus('停止（読み込み先と同じです）',true);
+        else setBackupStatus(granted?'書き込み許可済み':'未許可（▼から許可）',!granted);
+      }catch(e){if(g===backupGeneration)setBackupStatus(describeFolderError(e),true);}
+    }
+    try{localStorage.removeItem('fsPermissionGrantedMode');}catch(e){console.warn('旧権限記録の削除失敗',e);}
+    
+
+    /* ★機能追加: 重複IDのインジケーター更新処理 ★ */
+    function updateDuplicateIndicators() {
+      const allEntries = document.querySelectorAll('.patient-entry');
+      const idLocations = {}; // { "12345": ["干渉波", "ホットパック", "干渉波"] }
+
+      // 1. 全エントリを走査し、IDごとに所在テーブルを記録
+      allEntries.forEach(entry => {
+        const id = entry.dataset.id;
+        const table = entry.closest('.therapy-table');
+        if (id && table) {
+          if (!idLocations[id]) idLocations[id] = [];
+          idLocations[id].push(table.id);
+        }
+      });
+
+      // 2. 再度エントリを走査し、重複がある場合に表示を更新
+      allEntries.forEach(entry => {
+        const id = entry.dataset.id;
+        const locations = idLocations[id];
+        // 3行目のdivを取得
+        const line3 = entry.querySelector('div:nth-child(3)'); 
+
+        if (line3) {
+          // 既存のインジケータがあれば削除
+          const existing = line3.querySelector('.dup-indicator');
+          if (existing) existing.remove();
+
+          // 所在が複数ある場合（同じIDのマスが複数ある場合）
+          if (locations && locations.length > 1) {
+            // 表示順序に従ってソート（DOM出現順≒テーブル順になることが多いが、念のため定義順でソート）
+            const sortedLocs = locations.sort((a,b) => tableOrder.indexOf(a) - tableOrder.indexOf(b));
+            
+            let text = "";
+            sortedLocs.forEach(loc => {
+              text += (tableAbbr[loc] || "?");
+            });
+
+            const span = document.createElement('span');
+            span.className = 'dup-indicator';
+            span.textContent = text;
+            line3.appendChild(span);
+          }
+        }
+      });
+    }
+
+    /* ★修正点: 全体人数 + 各列の人数 + 重複チェック更新 ★ */
+    function updateCellCount(){
+      // 全体の人数を更新
+      $("#cell-count").textContent=`（${$$('.therapy-table-content .patient-entry').length}）`;
+
+      // 各列の人数をカウントしてヘッダーを更新
+      $$('.therapy-table').forEach(t=>{
+        const count = t.querySelectorAll('.therapy-table-content .patient-entry').length;
+        const header = t.querySelector('.therapy-table-header');
+        // 列のIDを名前として使用（"干渉波", "ホットパック"など）
+        if(header && t.id){
+          header.textContent = `${t.id} (${count})`;
+        }
+      });
+
+      // 重複インジケーターを更新
+      updateDuplicateIndicators();
+    }
+
+    function todayPrefix(){return getTodayString().replace(/\//g,'');}
+    function getCSVKind(name){
+      const n=name.toLowerCase();
+      if(!n.endsWith('.csv'))return null;
+      if(n.includes('reservations'))return 'reservations';
+      if(n.includes('patients'))return 'patients';
+      return null;
+    }
+    async function parseCSVFile(file){
+      if(!file.name.startsWith(todayPrefix()))throw new Error("本日のデータではありません: "+file.name+"（"+todayPrefix()+"）");
+      const kind=getCSVKind(file.name);
+      if(!kind)throw new Error('ファイル名に reservations または patients を含むCSVを使用してください。');
+      if(typeof XLSX==='undefined')throw new Error('CSV解析ライブラリを読み込めません。ネットワーク接続を確認してください。');
+      const buffer=await file.arrayBuffer();
+      const str=new TextDecoder('shift_jis').decode(buffer);
+      const wb=XLSX.read(str,{type:'string'}),ws=wb.Sheets[wb.SheetNames[0]];
+      if(!ws)throw new Error('CSVが空です: '+file.name);
+      const json=XLSX.utils.sheet_to_json(ws,{header:1});
+      if(!json.length)throw new Error('CSVが空です: '+file.name);
+      let index=null;
+      if(kind==='patients'){
+        index={};
+        (json[0]||[]).forEach((h,i)=>{if(h!=null)index[String(h).trim()]=i;});
+        for(const c of reqCols)if(index[c]===undefined)throw new Error('patientsファイルに必要なカラム「'+c+'」がありません。');
+      }
+      return {kind,json,index,name:file.name};
+    }
+    function applyCSVData(parsed){
+      if(parsed.kind==='reservations'){
+        reservationsData=parsed.json;reservationsFileName=parsed.name;
+        $("#reservations-file-name").textContent=parsed.name;
+      }else{
+        patientsData=parsed.json;patientsFileName=parsed.name;columnIndex=parsed.index;
+        $("#patients-file-name").textContent=parsed.name;
+      }
+    }
+    function refreshPatientInputs(){
+      const cur=$("#patient-id-input").value.trim();
+      if(cur)displayPatientInfoForMain(cur);
+      const reg=$("#reg-patient-id").value.trim();
+      if(reg)displayPatientInfoForModal(reg);
+      const quick=$("#quick-add-id").value.trim();
+      if(quick)searchPatientForQuickAdd(quick);
+    }
+    // ドラッグ＆ドロップと直接ファイル選択では1ファイルずつの読み込みも維持する
+    async function loadCSVFile(file){
+      try{const data=await parseCSVFile(file);applyCSVData(data);refreshPatientInputs();clearLoadError();return true;}
+      catch(e){error('データの読み込みに失敗しました: '+describeFolderError(e));console.error(e);return false;}
+    }
+    // 本日分かつ正しい拡張子のファイルだけを対象とし、更新日時の新しいものを優先する
+    function selectTodayPair(files){
+      const picked={};
+      for(const f of files){
+        const kind=getCSVKind(f.name);
+        if(!kind || !f.name.startsWith(todayPrefix()))continue;
+        const old=picked[kind];
+        if(!old || f.lastModified>old.lastModified || (f.lastModified===old.lastModified && f.name>old.name))picked[kind]=f;
+      }
+      const missing=['reservations','patients'].filter(k=>!picked[k]);
+      if(missing.length)throw new Error('本日（'+todayPrefix()+'）の '+missing.join(' / ')+' CSV が見つかりません。');
+      return [picked.reservations,picked.patients];
+    }
+    async function loadCSVPair(files){
+      const [r,p]=selectTodayPair(files);
+      // 両方の解析が成功してから反映し、片方だけ更新されることを防ぐ
+      const parsed=await Promise.all([parseCSVFile(r),parseCSVFile(p)]);
+      parsed.forEach(applyCSVData);refreshPatientInputs();clearLoadError();
+    }
+    
+
+    const getTodayString=()=>{
+      const t=new Date(),y=t.getFullYear(),m=String(t.getMonth()+1).padStart(2,'0'),d=String(t.getDate()).padStart(2,'0');
+      return `${y}/${m}/${d}`;
+    };
+
+    function handleIDInput(ev){
+      if(ev.key==="Enter"){
+        displayPatientInfo($("#patient-id-input").value.trim());
+      }
+    }
+
+    /* 通常画面フィールドをまとめてクリア */
+    function clearMainPatientFields(){
+      $("#name-input").value="";
+      $("#rehab-start-time").value="";
+      $("#pt-ot-input").value="";
+      $("#gender-input").value="";
+      $("#menu-display").textContent="物療項目";
+      $("#body-display").textContent="";
+    }
+
+    /* Enter時の検索（存在しなければアラート） */
+    function displayPatientInfo(id){
+      if(!patientsData){alert('csvファイルを読み込んでください');return;}
+      for(const c of reqCols) if(columnIndex[c]===undefined){
+        error(`patientsファイルに必要なカラム「${c}」がありません。`);return;
+      }
+      const trimmed=id.trim();
+      const p=patientsData.find((row,i)=>i&&String(row[columnIndex["患者ID"]]||'').trim()===trimmed);
+      if(!p){
+        alert('該当する患者が見つかりません');
+        clearMainPatientFields();
+        return;
+      }
+      $("#name-input").value=p[columnIndex["名前"]]||'';
+      $("#pt-ot-input").value=p[columnIndex["担当"]]||'';
+      $("#gender-input").value=p[columnIndex["性別"]]||'';
+      $("#menu-display").textContent=String(p[columnIndex["物療項目"]]||'').trim();
+      $("#body-display").textContent=String(p[columnIndex["物療部位"]]||'').trim();
+      if(reservationsData){
+        const today=getTodayString();
+        const excelSerialDateToJSDate=s=>new Date((s-25569)*86400000);
+        const fmt=d=>`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+        const r=reservationsData.find((row,i)=>{
+          if(!i)return false;
+          const rid=String(row[1]||'').trim();
+          let dt=row[3];
+          if(typeof dt==='number')dt=fmt(excelSerialDateToJSDate(dt));
+          else dt=(typeof dt==='string')?dt.trim():'';
+          return rid===trimmed&&dt===today;
+        });
+        $("#rehab-start-time").value=r?String(r[4]||'').trim():'';
+      }else{
+        $("#rehab-start-time").value="";
+      }
+    }
+
+    /* 通常画面のインクリメンタルサーチ（完全一致のみ） */
+    function displayPatientInfoForMain(id){
+      if(!patientsData || !id){
+        clearMainPatientFields();
+        return;
+      }
+      for(const c of reqCols) if(columnIndex[c]===undefined){
+        error(`patientsファイルに必要なカラム「${c}」がありません。`);return;
+      }
+      const trimmed=id.trim();
+      const p=patientsData.find((row,i)=>i&&String(row[columnIndex["患者ID"]]||'').trim()===trimmed);
+      if(!p){
+        clearMainPatientFields();
+        return;
+      }
+      $("#name-input").value=p[columnIndex["名前"]]||'';
+      $("#pt-ot-input").value=p[columnIndex["担当"]]||'';
+      $("#gender-input").value=p[columnIndex["性別"]]||'';
+      $("#menu-display").textContent=String(p[columnIndex["物療項目"]]||'').trim();
+      $("#body-display").textContent=String(p[columnIndex["物療部位"]]||'').trim();
+
+      if(reservationsData){
+        const today=getTodayString();
+        const excelSerialDateToJSDate=s=>new Date((s-25569)*86400000);
+        const fmt=d=>`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+        const r=reservationsData.find((row,i)=>{
+          if(!i)return false;
+          const rid=String(row[1]||'').trim();
+          let dt=row[3];
+          if(typeof dt==='number')dt=fmt(excelSerialDateToJSDate(dt));
+          else dt=(typeof dt==='string')?dt.trim():'';
+          return rid===trimmed&&dt===today;
+        });
+        $("#rehab-start-time").value=r?String(r[4]||'').trim():'';
+      }else{
+        $("#rehab-start-time").value="";
+      }
+    }
+
+    /* モーダル用フィールドクリア */
+    function clearModalPatientFields(){
+      $("#reg-name").value="";
+      $("#reg-start-time").value="";
+      $("#reg-pt-ot").value="";
+      $("#reg-menu-text").textContent="";
+      $("#reg-body-text").textContent="";
+      $("#reg-gender").value="";
+    }
+
+    /* モーダル用インクリメンタルサーチ（完全一致） */
+    function displayPatientInfoForModal(id){
+      if(!patientsData || !id){
+        clearModalPatientFields();
+        return;
+      }
+      for(const c of reqCols) if(columnIndex[c]===undefined){
+        error(`patientsファイルに必要なカラム「${c}」がありません。`);return;
+      }
+      const trimmed=id.trim();
+      const p=patientsData.find((row,i)=>i&&String(row[columnIndex["患者ID"]]||'').trim()===trimmed);
+      if(!p){
+        clearModalPatientFields();
+        return;
+      }
+      $("#reg-name").value=p[columnIndex["名前"]]||'';
+      $("#reg-pt-ot").value=p[columnIndex["担当"]]||'';
+      $("#reg-gender").value=p[columnIndex["性別"]]||'';
+      $("#reg-menu-text").textContent=String(p[columnIndex["物療項目"]]||'').trim();
+      $("#reg-body-text").textContent=String(p[columnIndex["物療部位"]]||'').trim();
+
+      if(reservationsData){
+        const today=getTodayString();
+        const excelSerialDateToJSDate=s=>new Date((s-25569)*86400000);
+        const fmt=d=>`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+        const r=reservationsData.find((row,i)=>{
+          if(!i)return false;
+          const rid=String(row[1]||'').trim();
+          let dt=row[3];
+          if(typeof dt==='number')dt=fmt(excelSerialDateToJSDate(dt));
+          else dt=(typeof dt==='string')?dt.trim():'';
+          return rid===trimmed&&dt===today;
+        });
+        $("#reg-start-time").value=r?String(r[4]||'').trim():'';
+      }else{
+        $("#reg-start-time").value="";
+      }
+    }
+
+    on($("#reg-patient-id"),"input",()=>displayPatientInfoForModal($("#reg-patient-id").value));
+    on($("#patient-id-input"),"input",()=>displayPatientInfoForMain($("#patient-id-input").value));
+
+    /* モーダル登録ボタン有効・無効 */
+    function updateModalRegisterButtonState(){
+      const anyChecked = Array.from(document.querySelectorAll('input[name="reg-modality"]'))
+        .some(cb => cb.checked);
+      $("#modal-register-button").disabled = !anyChecked;
+    }
+
+    /* 物理療法チェック変更でボタン状態更新 */
+    document.querySelectorAll('input[name="reg-modality"]').forEach(cb=>{
+      cb.addEventListener('change', updateModalRegisterButtonState);
+    });
+
+    function updateNameDisplay(entry){
+      const nameEl=entry.querySelector('.patient-name'); if(!nameEl)return;
+      nameEl.innerHTML="";
+      const main=document.createTextNode(`${entry.dataset.id} ${entry.dataset.name}`);
+      nameEl.appendChild(main);
+      if(entry.style.backgroundColor==='khaki'){
+        const s=document.createElement('span');
+        s.textContent='（物療中）';s.style.color='black';s.style.fontWeight='normal';
+        nameEl.appendChild(s);
+      }else if(entry.style.backgroundColor==='lightblue'){
+        const s=document.createElement('span');
+        s.textContent='（PT/OT中）';s.style.color='black';s.style.fontWeight='normal';
+        nameEl.appendChild(s);
+      }
+    }
+    /* 物療表示の正規化と描画（「物療：」の重複やスタイル崩れ防止） */
+    function trimJPSpaces(s){
+      return String(s||'').replace(/^[\s\u3000]+|[\s\u3000]+$/g,'');
+    }
+    function normalizeTherapy(val){
+      let s=trimJPSpaces(val);
+      s=s.replace(/^物療：[\s\u3000]*/,'');
+      return trimJPSpaces(s);
+    }
+    function renderTherapyHTML(key){
+      switch(key){
+        case '先': return '物療：先';
+        case '後': return '<span class="red-bold">物療：後</span>';
+        case '物療のみ': return '<span class="blue-bold">物療のみ</span>';
+        case '物療なし': return '物療なし';
+        default: return key||'';
+      }
+    }
+
+
+    function createPatientEntry(id,name,startTime,ptOt,therapy,memo,gender,timestamp){
+      const e=document.createElement('div');
+      e.className='patient-entry';
+      e.dataset.gender=gender; e.dataset.id=id; e.dataset.name=name;
+      e.setAttribute('draggable','true');
+      const ts=timestamp?timestamp:Date.now(); e.setAttribute('data-timestamp',ts);
+      const t=new Date(+ts), hh=t.getHours(), mm=String(t.getMinutes()).padStart(2,'0');
+
+      const tsDiv=document.createElement('div');
+      tsDiv.className='time-stamp'; tsDiv.textContent=`${hh}:${mm}`; e.appendChild(tsDiv);
+
+      const nameDiv=document.createElement('div');
+      const span=document.createElement('span');
+      span.classList.add('patient-name'); span.textContent=`${id} ${name}`;
+      span.style.fontSize='1.15em'; span.style.fontWeight='500';
+      span.style.color= gender==='男性'?'#191970': (gender==='女性'?'#8b0000 ':'#111827');
+      nameDiv.appendChild(span); e.appendChild(nameDiv);
+
+      const therapyKey=normalizeTherapy(therapy);
+      e.dataset.therapy=therapyKey;
+
+      const info=document.createElement('div');
+      info.innerHTML=`${startTime}　${ptOt}　${renderTherapyHTML(therapyKey)}`; e.appendChild(info);
+
+
+      const memoDiv=document.createElement('div');
+      memoDiv.classList.add('memo-div'); memoDiv.textContent=memo||""; e.appendChild(memoDiv);
+
+      e.style.backgroundColor='whitesmoke';
+
+      e.addEventListener('click',()=>{
+        clearInputs();$("#patient-id-input").value=id;displayPatientInfo(id);highlightSameID(id);
+      });
+      e.addEventListener('contextmenu',(ev)=>{ev.preventDefault();showContextMenu(ev,e);});
+      updateNameDisplay(e);
+      return e;
+    }
+
+    function addPatientToTherapy(type){
+      const id=$("#patient-id-input").value.trim(),
+            name=$("#name-input").value,
+            st=$("#rehab-start-time").value,
+            pt=$("#pt-ot-input").value,
+            opt=document.querySelector('input[name="therapy-option"]:checked')?.value||'未選択',
+            
+            // ★メモを強制的に「無し」にする
+            memo="", 
+            
+            g=$("#gender-input").value;
+      if(!id||!name){alert('患者IDと名前を入力してください。');return;}
+      const entry=createPatientEntry(id,name,st,pt,opt,memo,g);
+      $("#"+type).querySelector('.therapy-table-content').appendChild(entry);
+      clearInputs(); $("#patient-id-input").focus(); saveData(); updateCellCount();
+    }
+
+    function registerFromModal(){
+      const id=$("#reg-patient-id").value.trim();
+      const name=$("#reg-name").value.trim();
+      if(!id || !name){
+        alert("患者IDと名前を入力してください。");
+        return;
+      }
+      const st=$("#reg-start-time").value;
+      const pt=$("#reg-pt-ot").value;
+      const gender=$("#reg-gender").value;
+      const therapy=document.querySelector('input[name="reg-therapy-option"]:checked')?.value || "先";
+      const memo="";
+
+      const selectedTables=[];
+      document.querySelectorAll('input[name="reg-modality"]:checked').forEach(cb=>{
+        const tid=cb.dataset.tableId;
+        if(tid) selectedTables.push(tid);
+      });
+
+      const targets = selectedTables.length ? selectedTables : ["物療なし"];
+
+      targets.forEach(tid=>{
+        const entry=createPatientEntry(id,name,st,pt,therapy,memo,gender);
+        const table=document.getElementById(tid);
+        if(table){
+          table.querySelector('.therapy-table-content').appendChild(entry);
+        }
+      });
+
+      saveData();
+      updateCellCount();
+      closeRegisterModal();
+    }
+
+    function showContextMenu(ev,entry){
+      currentEntry=entry;
+      const menu=$("#context-menu");
+      menu.style.display='block';
+      let x=ev.pageX,y=ev.pageY,w=menu.offsetWidth,h=menu.offsetHeight,ww=innerWidth,wh=innerHeight;
+      if(x+w>ww)x=ww-w-10;
+      if(y+h>wh)y=wh-h-10;
+      x+=scrollX; y+=scrollY;
+      menu.style.left=`${x}px`; menu.style.top=`${y}px`; ev.stopPropagation();
+    }
+    function changeColor(color){
+      if(!currentEntry)return;
+      currentEntry.style.backgroundColor=color; updateNameDisplay(currentEntry);
+      if(color==='darkgray'&&!$("#show-completed").checked) currentEntry.style.display='none';
+      else currentEntry.style.display='block';
+      hideContextMenu(); saveData();
+    }
+    function updateTherapyValue(val){
+      if(!currentEntry)return;
+      const info=currentEntry.querySelector('div:nth-child(3)'); if(!info)return;
+
+      const parts=info.textContent.split('　');
+      if(parts.length<2)return;
+      const a=parts[0]||'', b=parts[1]||'';
+
+      const key=normalizeTherapy(val);
+      currentEntry.dataset.therapy=key;
+
+      info.innerHTML=`${a}　${b}　${renderTherapyHTML(key)}`;
+      hideContextMenu(); saveData();
+    }
+    function markAsCompleted(type){
+      if(!currentEntry)return;
+      let chk=currentEntry.querySelector('.completed-check');
+      if(!chk){
+        chk=document.createElement('span');chk.className='completed-check';
+        currentEntry.appendChild(chk);chk.textContent=`✔️${type}`;
+      }else{
+        let t=chk.textContent.split(' ');
+        t=t.includes(`✔️${type}`)?t.filter(s=>s!==`✔️${type}`):[...t,`✔️${type}`];
+        chk.textContent=t.join(' ')||'';
+        if(!chk.textContent)chk.remove();
+      }
+      if(type==='物'||type==='PT/OT'){
+        currentEntry.style.backgroundColor='whitesmoke';updateNameDisplay(currentEntry);
+      }
+      hideContextMenu(); saveData();
+    }
+    function editMemo(){
+      if(!currentEntry)return;
+      const m=currentEntry.querySelector('.memo-div');
+      const n=prompt("メモを編集:",m.textContent);
+      if(n!==null)m.textContent=n;
+      hideContextMenu(); saveData();
+    }
+    function deleteEntry(){
+      if(!currentEntry)return;
+      if(confirm("削除しますか？")){
+        currentEntry.remove(); saveData(); updateCellCount();
+      }
+      hideContextMenu();
+    }
+    function hideContextMenu(){
+      const menu=$("#context-menu");menu.style.display='none';
+    }
+    on(document.body,'click',e=>{if(!e.target.closest('.context-menu'))hideContextMenu();});
+
+    function clearInputs(){
+      $("#patient-id-input").value='';
+      clearMainPatientFields();
+      document.querySelectorAll('input[name="therapy-option"]').forEach(r=>r.checked=false);
+      $("#memo-input").value='';
+      document.querySelector('input[name="therapy-option"][value="先"]').checked=true;
+    }
+
+    /* ★Firebaseへの保存機能★ */
+    function saveData(){
+      const data=[];
+      $$('.therapy-table').forEach(t=>{
+        const list=t.querySelector('.therapy-table-content').querySelectorAll('.patient-entry');
+        const rows=[];
+        list.forEach(e=>{
+          const info=e.querySelector('div:nth-child(3)')?.textContent||'';
+          // 保存時は表示用のdup-indicatorを除去してテキストを取得する
+          const clone = e.cloneNode(true);
+          const dup = clone.querySelector('.dup-indicator');
+          if(dup) dup.remove();
+          
+          const cleanInfo = clone.querySelector('div:nth-child(3)')?.textContent||'';
+          const [start,pt,therRaw]=cleanInfo.split('　');
+          
+          const therapyKey = normalizeTherapy(e.dataset.therapy || therRaw || '');
+          e.dataset.therapy = therapyKey;
+
+          rows.push({
+            id:e.dataset.id,name:e.dataset.name,gender:e.dataset.gender,
+            startTime:start||'',ptOt:pt||'',
+            therapy:therapyKey,memo:e.querySelector('.memo-div').textContent,
+            backgroundColor:e.style.backgroundColor,checkMark:e.querySelector('.completed-check')?.textContent||'',
+            timestamp:e.getAttribute('data-timestamp')
+          });
+        });
+        data.push({tableId:t.id,entries:rows});
+      });
+      
+      dbRef.set(data).catch(e => console.error("Save failed", e));
+    }
+
+    /* ★Firebaseからデータが来たら画面を描き直す機能★ */
+    dbRef.on('value', (snapshot) => {
+      const data = snapshot.val(); 
+      $$('.therapy-table .therapy-table-content').forEach(c => c.innerHTML = '');
+
+      if(data){
+        const tables=$$('.therapy-table');
+        data.forEach(t=>{
+          const el=[...tables].find(x=>x.id===t.tableId); if(!el)return;
+          const c=el.querySelector('.therapy-table-content');
+          if(t.entries){
+            t.entries.forEach(d=>{
+                const e=createPatientEntry(d.id,d.name,d.startTime,d.ptOt,d.therapy,d.memo,d.gender,d.timestamp);
+                e.style.backgroundColor=d.backgroundColor; updateNameDisplay(e);
+                if(d.checkMark){
+                const cm=document.createElement('span');
+                cm.className='completed-check'; cm.textContent=d.checkMark; e.appendChild(cm);
+                }
+                c.appendChild(e);
+            });
+          }
+        });
+      }
+      updateCellCount();
+      toggleCompletedVisibility();
+      startAutoSave();
+    });
+
+    function sortPatients(){
+      $$('.therapy-table-content').forEach(c=>{
+        const arr=[...c.querySelectorAll('.patient-entry')];
+        arr.sort((a,b)=>{
+          const order={khaki:1,lightblue:2,whitesmoke:3,darkgray:4};
+          const ca=a.style.backgroundColor,cb=b.style.backgroundColor;
+          if(ca===cb){
+            return (+a.getAttribute('data-timestamp'))-(+b.getAttribute('data-timestamp'));
+          }
+          return (order[ca]||5)-(order[cb]||5);
+        });
+        arr.forEach(e=>c.appendChild(e));
+      });
+      saveData(); updateCellCount();
+    }
+
+    function toggleCompletedVisibility(){
+      const onFlag=$("#show-completed").checked;
+      $$('.therapy-table-content .patient-entry').forEach(e=>{
+        const c=getComputedStyle(e).backgroundColor;
+        if(c==='rgb(169, 169, 169)') e.style.display=onFlag?'block':'none';
+      });
+    }
+
+    function toggleSaveLoad(){
+      const box=$("#save-load-container"),btn=$("#toggle-save-load-button"),del=$("#save-and-delete-button"),rest=$("#restore-button");
+      const opened=(box.style.display==='flex');
+      box.style.display=opened?'none':'flex';
+      btn.textContent=opened?'▼':'▲';
+      del.style.display=opened?'none':'block';
+      if(rest) rest.style.display=opened?'none':'block';
+    }
+
+    function isFileDragEvent(e){
+      const types=e.dataTransfer?.types;
+      return types && Array.from(types).includes('Files');
+    }
+    function handleDragOver(e){
+      if(isFileDragEvent(e)){ e.preventDefault(); e.dataTransfer.dropEffect='copy'; }
+    }
+    function handleDrop(e){
+      if(!isFileDragEvent(e)) return;
+      e.preventDefault();
+      if(folderBusy){error("フォルダ読み込み中です。完了後にCSVをドロップしてください。");return;}
+      const f=e.dataTransfer.files[0]; if(!f)return;
+      if(f.name.toLowerCase().endsWith('.csv')) loadCSVFile(f);
+      else error('無効なファイル形式です。ファイル名に"reservations"または"patients"を含むCSVファイルを使用してください。');
+    }
+
+    function snapshotEls(containers){
+      const map=new Map();
+      containers.forEach(c=>{
+        if(!c) return;
+        c.querySelectorAll('.patient-entry:not(.dragging)').forEach(el=>{
+          map.set(el, el.getBoundingClientRect());
+        });
+      });
+      return map;
+    }
+    function flipAnimate(prevMap){
+      prevMap.forEach((first, el)=>{
+        const last=el.getBoundingClientRect();
+        const dx=first.left-last.left;
+        const dy=first.top-last.top;
+        if(dx||dy){
+          el.style.transition='none';
+          el.style.transform=`translate(${dx}px, ${dy}px)`;
+          void el.offsetWidth;
+          requestAnimationFrame(()=>{
+            el.style.transition='transform 180ms ease';
+            el.style.transform='';
+          });
+        }
+      });
+    }
+
+    function initDragAndDrop(){
+      document.addEventListener('dragstart',(e)=>{
+        const el=e.target.closest('.patient-entry');
+        if(!el) return;
+        e.dataTransfer.effectAllowed='move';
+        e.dataTransfer.setData('text/plain', el.dataset.id || 'drag');
+        requestAnimationFrame(()=> el.classList.add('dragging'));
+      });
+
+      document.addEventListener('dragend',(e)=>{
+        const el=e.target.closest('.patient-entry');
+        if(!el) return;
+        el.classList.remove('dragging');
+        saveData(); updateCellCount();
+      });
+
+      $$('.therapy-table-content').forEach(container=>{
+        container.addEventListener('dragover',(e)=>{
+          const dragging=document.querySelector('.patient-entry.dragging');
+          if(!dragging) return;
+          e.preventDefault();
+
+          const fromContainer=dragging.parentElement;
+          const afterEl=getDragAfterElement(container, e.clientY);
+
+          const sameContainer=(container===fromContainer);
+          const atEnd=(afterEl==null);
+          const noChange = sameContainer && (
+            (atEnd && dragging===container.lastElementChild) ||
+            (afterEl===dragging.nextElementSibling)
+          );
+          if(noChange) return;
+
+          const prev=snapshotEls([fromContainer, container]);
+
+          if(afterEl==null) container.appendChild(dragging);
+          else container.insertBefore(dragging, afterEl);
+
+          flipAnimate(prev);
+        });
+
+        container.addEventListener('drop',(e)=>{
+          const dragging=document.querySelector('.patient-entry.dragging');
+          if(!dragging) return;
+          e.preventDefault();
+          saveData(); updateCellCount();
+        });
+      });
+    }
+
+    function getDragAfterElement(container, y){
+      const els=[...container.querySelectorAll('.patient-entry:not(.dragging)')];
+      let closest={offset:Number.NEGATIVE_INFINITY, element:null};
+      for(const child of els){
+        const box=child.getBoundingClientRect();
+        const offset=y - box.top - box.height/2;
+        if(offset<0 && offset>closest.offset){ closest={offset, element:child}; }
+      }
+      return closest.element;
+    }
+
+    async function readFolder(dir){
+      const files=[];
+      // 無関係なファイルや自動保存ファイルは開かない
+      for await(const ent of dir.values()){
+        if(ent.kind==='file' && getCSVKind(ent.name) && ent.name.startsWith(todayPrefix()))files.push(await ent.getFile());
+      }
+      await loadCSVPair(files);
+      setFolderStatus('フォルダ: '+dir.name+'（読み込み完了）');
+    }
+    function showFolderFailure(e){
+      console.error(e);
+      if(e?.name==='AbortError'){
+        setFolderStatus('フォルダ選択をキャンセル',true);return;
+      }
+      setFolderStatus('読み込み失敗',true);
+      error('フォルダから読み込めません: '+describeFolderError(e)+'\n「▼」→「フォルダを選択」で再指定するか、「代替読み込み」で読み込んでください。');
+    }
+    function openFallbackFolder(){
+      const input=$("#fallback-folder-input");
+      input.value='';
+      if('webkitdirectory' in input)input.click();
+      else openDirectFiles();
+    }
+    function openDirectFiles(){const input=$("#fallback-files-input");input.value='';input.click();}
+    function setActiveDirectory(dir){
+      folderTouched=true;activeDirectory=dir;folderGeneration++;
+      $("#folder-name-display").textContent=dir?dir.name:'';
+    }
+    async function pickDirectory(){
+      if(folderBusy)return;
+      if(typeof window.showDirectoryPicker!=='function'){
+        setFolderStatus('通常のフォルダ選択非対応・代替方式を使用',true);
+        openFallbackFolder();return;
+      }
+      folderTouched=true;clearLoadError();setFolderBusy(true);
+      try{
+        // ユーザー操作の直後に選択ダイアログを開く（IndexedDB待機を挟まない）
+        const dir=await window.showDirectoryPicker({mode:'read'});
+        setActiveDirectory(dir);
+        setFolderStatus('フォルダ: '+dir.name);
+        // 記憶に失敗しても、現在のセッションでは読み込める
+        let rememberError=null;
+        try{await saveDirectoryHandle(dir);}catch(e){rememberError=e;console.warn(e);}
+        await refreshBackupStatus();
+        await readFolder(dir);
+        if(rememberError)setFolderStatus('フォルダ: '+dir.name+'（読み込み完了・再起動後は再選択）',true);
+      }catch(e){showFolderFailure(e);}
+      finally{setFolderBusy(false);}
+    }
+    on($("#data-load-button"),'click',async()=>{
+      if(folderBusy)return;
+      if(!activeDirectory || typeof window.showDirectoryPicker!=='function'){await pickDirectory();return;}
+      clearLoadError();setFolderBusy(true);
+      const dir=activeDirectory;
+      try{
+        if(!await verifyPermission(dir,'read',true))throw new DOMException('フォルダの読み取りが許可されていません。','NotAllowedError');
+        await readFolder(dir);
+        await refreshBackupStatus();
+      }catch(e){showFolderFailure(e);}
+      finally{setFolderBusy(false);}
+    });
+    on($("#folder-select-button"),'click',pickDirectory);
+    on($("#fallback-folder-button"),'click',openFallbackFolder);
+    on($("#fallback-files-button"),'click',openDirectFiles);
+    on($("#fallback-folder-input"),'change',async e=>{
+      const files=Array.from(e.target.files||[]);
+      if(!files.length || folderBusy)return;
+      setFolderBusy(true);clearLoadError();
+      try{
+        // 通常方式と同じく選択フォルダ直下のファイルだけを対象とする
+        const direct=files.filter(f=>!f.webkitRelativePath || f.webkitRelativePath.split('/').length===2);
+        await loadCSVPair(direct);
+        const name=files[0].webkitRelativePath?.split('/')[0] || '選択フォルダ';
+        // 代替読み込みでは読み込み先のハンドルだけを解除する。自動保存先は維持する。
+        setActiveDirectory(null);
+        $("#folder-name-display").textContent=name+'（代替方式・読み取り専用）';
+        setFolderStatus('フォルダ: '+name+'（代替読み込み完了）');
+        await refreshBackupStatus();
+        try{await forgetDirectoryHandle();}catch(err){console.warn(err);error('読み込みは成功しましたが、旧読み込みフォルダの記憶を解除できませんでした。再起動時は読み込み先を確認してください。');}
+      }catch(err){showFolderFailure(err);}
+      finally{setFolderBusy(false);}
+    });
+    on($("#fallback-files-input"),'change',async e=>{
+      const files=Array.from(e.target.files||[]);
+      if(!files.length || folderBusy)return;
+      setFolderBusy(true);clearLoadError();
+      try{
+        if(files.length===1)await loadCSVFile(files[0]);
+        else await loadCSVPair(files);
+      }catch(err){showFolderFailure(err);}
+      finally{setFolderBusy(false);}
+    });
+    async function pickBackupDirectory(){
+      if(backupPicking)return;
+      if(typeof window.showDirectoryPicker!=='function'){
+        setBackupStatus('非対応ブラウザ',true);
+        error('このブラウザはフォルダへの書き込みに対応していません。自動保存には対応するChromeまたはEdgeを使用してください。');return;
+      }
+      backupPicking=true;
+      $("#backup-folder-button").disabled=true;$("#write-permission-button").disabled=true;
+      clearLoadError();
+      try{
+        // ユーザー操作直後に書き込み用の選択ダイアログを開く
+        const dir=await window.showDirectoryPicker({mode:'readwrite',id:'therapy-backup'});
+        if(await sameAsReadDirectory(dir))throw new Error('読み込み用フォルダとは別のフォルダを選択してください。');
+        if(!await verifyPermission(dir,'readwrite',true))throw new DOMException('書き込みが許可されていません。','NotAllowedError');
+        setBackupDirectory(dir);
+        try{await saveBackupDirectoryHandle(dir);}
+        catch(e){console.warn(e);error('保存先を記憶できませんでした。再起動後に再選択してください。');}
+        await refreshBackupStatus();
+      }catch(e){
+        if(e?.name!=='AbortError')error('自動保存先を設定できません: '+describeFolderError(e));
+        await refreshBackupStatus();
+        return;
+      }finally{
+        backupPicking=false;$("#backup-folder-button").disabled=false;$("#write-permission-button").disabled=false;
+      }
+      if(autoSaveStarted)await autoSaveCurrentState();
+    }
+    on($("#backup-folder-button"),'click',pickBackupDirectory);
+    on($("#write-permission-button"),'click',async()=>{
+      if(backupPicking)return;
+      const dir=backupDirectory;
+      if(!dir){await pickBackupDirectory();return;}
+      try{
+        if(!await verifyPermission(dir,'readwrite',true))throw new DOMException('書き込みが許可されていません。','NotAllowedError');
+        if(await sameAsReadDirectory(dir))throw new Error('読み込み用フォルダとは別のフォルダを選択してください。');
+        clearLoadError();setBackupStatus('書き込み許可済み');
+        if(autoSaveStarted)await autoSaveCurrentState();
+      }catch(e){setBackupStatus(describeFolderError(e),true);error('自動保存を許可できません: '+describeFolderError(e));}
+    });
+    async function restoreRememberedBackup(){
+      try{
+        const dir=await getBackupDirectoryHandle();
+        if(backupTouched || backupPicking)return;
+        // 旧読み込み用ハンドルを自動保存先に流用しない
+        if(dir)setBackupDirectory(dir);
+        await refreshBackupStatus();
+      }catch(e){if(!backupTouched)setBackupStatus('保存先の記憶を取得できません。再選択してください。',true);console.warn(e);}
+    }
+    // 初期化時に記憶されたフォルダを取得するが、選択操作を妨げない
+    async function restoreRememberedFolder(){
+      try{
+        const dir=await getDirectoryHandleFromDB();
+        if(folderTouched)return;
+        if(!dir){setFolderStatus('フォルダ未選択',true);return;}
+        activeDirectory=dir;folderGeneration++;
+        $("#folder-name-display").textContent=dir.name;
+        const g=folderGeneration;
+        const allowed=await verifyPermission(dir,'read',false);
+        if(g!==folderGeneration)return;
+        setFolderStatus('フォルダ: '+dir.name+(allowed?'':'（許可要確認）'),!allowed);
+      }catch(e){
+        if(!folderTouched){setFolderStatus('フォルダ記憶の取得失敗・再選択してください',true);}
+        console.warn(e);
+      }
+    }
+    window.addEventListener('load',()=>{
+      try{['reservationsData','patientsData','reservationsFileName','patientsFileName'].forEach(k=>localStorage.removeItem(k));}catch(e){console.warn(e);}
+      initDragAndDrop();updateCellCount();
+      restoreRememberedFolder().then(restoreRememberedBackup).then(()=>{if(autoSaveStarted && backupDirectory)autoSaveCurrentState();});
+    });
+    
+
+    // 現在の表（マス）の状態をCSVにして返す（自動保存・手動保存で共通利用）
+    function buildCurrentStateCSV(){
+      const rows=[["テーブル","患者ID","名前","性別","リハビリ開始時間","担当","物療","メモ","背景色","チェックマーク"]];
+      $$('.therapy-table').forEach(t=>{
+        const id=t.id;
+        t.querySelectorAll('.therapy-table-content .patient-entry').forEach(e=>{
+          // 保存時は表示用のdup-indicatorを除去してテキストを取得する
+          const clone = e.cloneNode(true);
+          const dup = clone.querySelector('.dup-indicator');
+          if(dup) dup.remove();
+          
+          const info=clone.querySelector('div:nth-child(3)')?.textContent||"";
+          const ps=info.split('　');
+          rows.push([
+            id,
+            e.dataset.id,
+            e.dataset.name,
+            e.dataset.gender,
+            ps[0]||"",
+            ps[1]||"",
+            normalizeTherapy(ps[2]||""),
+            e.querySelector('.memo-div')?.textContent||"",
+            e.style.backgroundColor||"",
+            e.querySelector('.completed-check')?e.querySelector('.completed-check').textContent:""
+          ]);
+        });
+      });
+      return "\uFEFF"+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+    }
+
+    // 自動保存：専用の保存先を選択済みの場合、そのフォルダに新規ファイルとして保存する（上書きしない）
+    async function autoSaveCurrentState(){
+      const dir=backupDirectory,g=backupGeneration;
+      if(!dir || autoSaving || backupPicking || folderBusy || !autoSaveStarted)return;
+      autoSaving=true;
+      try{
+        if(await sameAsReadDirectory(dir)){
+          if(g===backupGeneration)setBackupStatus('停止（読み込み先と同じです）',true);
+          return;
+        }
+        if(!await verifyPermission(dir,'readwrite',false)){
+          if(g===backupGeneration)setBackupStatus('停止（書き込み許可が必要）',true);
+          return;
+        }
+        if(g!==backupGeneration || backupPicking || folderBusy)return;
+        const csv=buildCurrentStateCSV();
+        const d=new Date();
+        const pad=(n,l=2)=>String(n).padStart(l,'0');
+        const fn=`自動保存_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}-${pad(d.getMilliseconds(),3)}.csv`;
+        const fh=await dir.getFileHandle(fn,{create:true});
+        const w=await fh.createWritable();
+        if(g!==backupGeneration || backupPicking || folderBusy){await w.abort();return;}
+        await w.write(csv);await w.close();
+        if(g===backupGeneration)setBackupStatus('成功 '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()));
+      }catch(e){
+        console.error('自動保存に失敗しました',e);
+        if(g===backupGeneration)setBackupStatus('失敗 '+describeFolderError(e),true);
+      }finally{autoSaving=false;}
+    }
+    
+
+    const AUTO_SAVE_INTERVAL_MS=5*60*1000;
+    let autoSaveTimer=null;
+    let autoSaveStarted=false;
+    function startAutoSave(){
+      if(autoSaveStarted)return;
+      autoSaveStarted=true;
+
+      // 画面表示直後（初回描画後）に1回保存
+      autoSaveCurrentState();
+
+      // 以降5分おきに保存
+      autoSaveTimer=setInterval(()=>{autoSaveCurrentState();}, AUTO_SAVE_INTERVAL_MS);
+    }
+
+
+// CSVファイルから表の状態を復元する（サーバー不具合時の復旧用）
+function applyDataToScreen(data){
+  $$('.therapy-table .therapy-table-content').forEach(c => c.innerHTML = '');
+
+  if(data){
+    const tables=$$('.therapy-table');
+    data.forEach(t=>{
+      const el=[...tables].find(x=>x.id===t.tableId); if(!el)return;
+      const c=el.querySelector('.therapy-table-content');
+      if(t.entries){
+        t.entries.forEach(d=>{
+          const e=createPatientEntry(d.id,d.name,d.startTime,d.ptOt,d.therapy,d.memo,d.gender,d.timestamp);
+          e.style.backgroundColor=d.backgroundColor||''; 
+          updateNameDisplay(e);
+          if(d.checkMark){
+            const cm=document.createElement('span');
+            cm.className='completed-check';
+            cm.textContent=d.checkMark;
+            e.appendChild(cm);
+          }
+          c.appendChild(e);
+        });
+      }
+    });
+  }
+
+  updateCellCount();
+  toggleCompletedVisibility();
+}
+
+async function restoreDataFromCSV(){
+  const input=document.createElement('input');
+  input.type='file';
+  input.accept='.csv,text/csv';
+  input.onchange=async ()=>{
+    const file=input.files && input.files[0];
+    if(!file) return;
+
+    if(!confirm("選択したCSVから表の状態を復元します。現在の表は置き換えられます。よろしいですか？")) return;
+
+    let text="";
+    try{
+      text=await file.text();
+    }catch(e){
+      console.error(e);
+      alert("ファイルの読み込みに失敗しました。");
+      return;
+    }
+
+    try{
+      const wb=XLSX.read(text,{type:'string'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const json=XLSX.utils.sheet_to_json(ws,{header:1, raw:false});
+
+      if(!json || json.length<2){
+        alert("CSVの内容が空です。");
+        return;
+      }
+
+      const header=(json[0]||[]).map(v=>String(v||'').trim());
+      const idx={
+        table: header.indexOf("テーブル"),
+        pid: header.indexOf("患者ID"),
+        name: header.indexOf("名前"),
+        gender: header.indexOf("性別"),
+        start: header.indexOf("リハビリ開始時間"),
+        pt: header.indexOf("担当"),
+        therapy: header.indexOf("物療"),
+        memo: header.indexOf("メモ"),
+        bg: header.indexOf("背景色"),
+        check: header.indexOf("チェックマーク")
+      };
+
+      if(idx.table<0 || idx.pid<0){
+        alert("このCSVは復元用の形式ではありません。");
+        return;
+      }
+
+      const map=new Map();
+      let counter=0;
+
+      for(let r=1;r<json.length;r++){
+        const row=json[r];
+        if(!row || row.length===0) continue;
+
+        const tableId=String(row[idx.table]||'').trim();
+        const pid=String(row[idx.pid]||'').trim();
+        if(!tableId || !pid) continue;
+
+        const entry={
+          id: pid,
+          name: String(row[idx.name]||''),
+          gender: String(row[idx.gender]||''),
+          startTime: String(row[idx.start]||''),
+          ptOt: String(row[idx.pt]||''),
+          therapy: normalizeTherapy(String(row[idx.therapy]||'')),
+          memo: String(row[idx.memo]||''),
+          backgroundColor: String(row[idx.bg]||''),
+          checkMark: String(row[idx.check]||''),
+          timestamp: String(Date.now() + (counter++))
+        };
+
+        if(!map.has(tableId)) map.set(tableId,[]);
+        map.get(tableId).push(entry);
+      }
+
+      const data=[...$$('.therapy-table')].map(t=>({
+        tableId: t.id,
+        entries: map.get(t.id) || []
+      }));
+
+      // まず画面に反映（サーバーが不安定でも復元できるようにする）
+      applyDataToScreen(data);
+
+      // サーバーにも反映（失敗しても画面の復元は維持）
+      try{
+        await dbRef.set(data);
+      }catch(e){
+        console.error("復元データのサーバー反映に失敗しました",e);
+      }
+    }catch(e){
+      console.error(e);
+      alert("CSVの解析に失敗しました。");
+    }
+  };
+  input.click();
+}
+
+
+// 手動保存も自動保存と同じ専用フォルダを使用する。
+async function saveDataAndClear(){
+  const button=$("#save-and-delete-button");
+  if(button.disabled)return;
+  const dir=backupDirectory, generation=backupGeneration;
+  if(!dir){
+    alert("自動保存用フォルダが未設定です。▼から「自動保存先を選択」を押して設定してください。保存・削除は行いません。");
+    return;
+  }
+  if(backupPicking || folderBusy){alert("フォルダの設定・読み込みが完了してから実行してください。");return;}
+  if(!confirm("\n⭐️注意\n自動保存用フォルダ「"+dir.name+"」に表のデータを保存し、共有されている表の内容を全て削除します。よろしいですか？\n"))return;
+  button.disabled=true;
+  let fn='', saved=false, writer=null;
+  try{
+    if(!await verifyPermission(dir,'readwrite',true))throw new Error("自動保存用フォルダへの書き込みが許可されていません。▼から「自動保存を許可」を押してください。");
+    if(await sameAsReadDirectory(dir))throw new Error("読み込み用フォルダと同じです。別の自動保存先を選択してください。");
+    if(generation!==backupGeneration || backupPicking || folderBusy)throw new Error("フォルダ設定が変更されたため中止しました。");
+    if(statusDiv.textContent!=="🟢 接続中")throw new Error("Firebaseに接続されていません。接続後に再実行してください。");
+    const csv=buildCurrentStateCSV();
+    const d=new Date(),pad=(n,l=2)=>String(n).padStart(l,'0');
+    fn=`物療データ_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}-${pad(d.getMilliseconds(),3)}.csv`;
+    const fh=await dir.getFileHandle(fn,{create:true});
+    writer=await fh.createWritable();
+    await writer.write(csv);
+    await writer.close();
+    writer=null;
+    saved=true;
+    // 保存中に設定や表の内容が変わった場合、未保存の内容を削除しない。
+    if(generation!==backupGeneration || backupPicking || folderBusy || await sameAsReadDirectory(dir))throw new Error("フォルダ設定が変更されたため全削除を中止しました。");
+    if(statusDiv.textContent!=="🟢 接続中")throw new Error("Firebaseとの接続が切れたため全削除を中止しました。");
+    if(buildCurrentStateCSV()!==csv)throw new Error("保存中に表の内容が変更されたため全削除を中止しました。再実行してください。");
+    await dbRef.set(null);
+    updateCellCount();
+    alert("自動保存用フォルダ「"+dir.name+"」に保存し、全削除しました。\n"+fn);
+  }catch(e){
+    if(writer){try{await writer.abort();}catch(abortError){console.warn(abortError);}}
+    console.error("手動保存・全削除処理に失敗しました",e);
+    alert((saved?"CSVは保存済みです。全削除の完了を確認できませんでした。\n保存先: "+dir.name+" / "+fn:"保存に失敗したため、全削除は行いませんでした。")+"\n"+describeFolderError(e));
+  }finally{button.disabled=false;}
+}
+  </script>
+</body>
+</html>
